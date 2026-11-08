@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: closry-postgres
+    environment:
+      POSTGRES_DB: closry
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: pwPostgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - closry_pg_data:/var/lib/postgresql/data
+      - ./infra/docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d closry"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:8
+    container_name: closry-redis
+    command: redis-server --appendonly yes --maxmemory-policy noeviction
+    ports:
+      - "6379:6379"
+    volumes:
+      - closry_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  closry_pg_data:
+  closry_redis_data:
