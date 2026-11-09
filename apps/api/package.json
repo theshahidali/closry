@@ -1,0 +1,27 @@
+{
+  "name": "@closry/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@closry/db": "workspace:*",
+    "@closry/shared": "workspace:*",
+    "dotenv": "^18.0.9",
+    "drizzle-orm": "^0.36.0",
+    "express": "^4.21.0",
+    "pino": "^9.5.0",
+    "pino-http": "^10.3.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
