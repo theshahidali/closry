@@ -1,2 +1,3 @@
 export * from "./schema";
-export { createAppClient } from "./client";
+export { createAppClient, createPool } from "./client";
+export { withTenant, type Tx } from "./tenant";

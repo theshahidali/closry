@@ -13,3 +13,7 @@ export function createAppClient(databaseUrl: string) {
   const pool = new Pool({ connectionString: databaseUrl, max: 10 });
   return drizzle(pool);
 }
+
+export function createPool(connectionString: string): Pool {
+  return new Pool({ connectionString, max: 10 });
+}
