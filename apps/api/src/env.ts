@@ -5,6 +5,7 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3001),
   DATABASE_URL: z.string().min(1),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  WEB_ORIGIN: z.string().default("http://localhost:3000"),
 });
 
 export const env = EnvSchema.parse(process.env);
