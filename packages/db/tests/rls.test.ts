@@ -86,4 +86,18 @@ describe("RLS tenant isolation", () => {
       )
     ).rejects.toThrow(/row-level security policy/);
   });
+
+    it("withTenant helper enforces isolation", async () => {
+        const { createPool } = await import("../src/client");
+        const { withTenant } = await import("../src/tenant");
+        const { tenants } = await import("../src/schema");
+
+        const pool = createPool(APP_USER_URL);
+        const rows = await withTenant(pool, tenantA, (tx) =>
+            tx.select().from(tenants),
+        );
+        expect(rows).toHaveLength(1);
+        expect(rows[0].id).toBe(tenantA);
+        await pool.end();
+    });
 });
