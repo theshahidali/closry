@@ -3,10 +3,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
 import type { FinancialEntry, OperationalMetric } from "@/lib/types";
+import type { VariancesResponse } from "@/lib/variance-types";
 import { KpiCard } from "@/components/kpi-card";
+import { VarianceTable } from "@/components/variance-table";
 
 const CURRENT_MONTH = "2026-10";
-const PRIOR_MONTH = "2026-09";
 
 function sumByType(entries: FinancialEntry[], type: FinancialEntry["accountType"]) {
   return entries
@@ -32,31 +33,19 @@ export default function DashboardPage() {
     queryKey: ["financials", CURRENT_MONTH],
     queryFn: () => apiGet<FinancialEntry[]>(`/api/financials?month=${CURRENT_MONTH}`),
   });
-  const prior = useQuery({
-    queryKey: ["financials", PRIOR_MONTH],
-    queryFn: () => apiGet<FinancialEntry[]>(`/api/financials?month=${PRIOR_MONTH}`),
-  });
-  const currentMetrics = useQuery({
+  const metrics = useQuery({
     queryKey: ["metrics", CURRENT_MONTH],
     queryFn: () => apiGet<OperationalMetric[]>(`/api/metrics?month=${CURRENT_MONTH}`),
   });
-  const priorMetrics = useQuery({
-    queryKey: ["metrics", PRIOR_MONTH],
-    queryFn: () => apiGet<OperationalMetric[]>(`/api/metrics?month=${PRIOR_MONTH}`),
+  const variances = useQuery({
+    queryKey: ["variances", CURRENT_MONTH],
+    queryFn: () => apiGet<VariancesResponse>(`/api/variances?month=${CURRENT_MONTH}`),
   });
 
-  const isLoading =
-    current.isLoading ||
-    prior.isLoading ||
-    currentMetrics.isLoading ||
-    priorMetrics.isLoading;
-
-  const error =
-    current.error || prior.error || currentMetrics.error || priorMetrics.error;
-
-  if (isLoading) {
+  if (current.isLoading || metrics.isLoading || variances.isLoading) {
     return <div className="text-sm text-neutral-500">Loading dashboard…</div>;
   }
+  const error = current.error || metrics.error || variances.error;
   if (error) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -66,67 +55,81 @@ export default function DashboardPage() {
   }
 
   const c = current.data!;
-  const p = prior.data!;
-  const cm = currentMetrics.data!;
-  const pm = priorMetrics.data!;
+  const m = metrics.data!;
+  const v = variances.data!;
 
-  const revenueNow = sumByType(c, "revenue");
-  const revenuePrior = sumByType(p, "revenue");
-  const cogsNow = sumByType(c, "cogs");
-  const opexNow = sumByType(c, "opex");
-  const cogsPrior = sumByType(p, "cogs");
-  const opexPrior = sumByType(p, "opex");
-  const ebitdaNow = revenueNow - cogsNow - opexNow;
-  const ebitdaPrior = revenuePrior - cogsPrior - opexPrior;
-  const mrrNow = Number(cm.find((m) => m.metricKey === "mrr")?.metricValue ?? 0);
-  const mrrPrior = Number(pm.find((m) => m.metricKey === "mrr")?.metricValue ?? 0);
+  const revenue = sumByType(c, "revenue");
+  const cogs = sumByType(c, "cogs");
+  const opex = sumByType(c, "opex");
+  const ebitda = revenue - cogs - opex;
+  const mrr = Number(m.find((x) => x.metricKey === "mrr")?.metricValue ?? 0);
+
+  const bridge = v.ebitdaBridge.steps;
+  const revStep = bridge.find((s) => s.label === "Revenue")!;
+  const ebitdaStep = bridge.find((s) => s.label === "EBITDA")!;
+  const mrrStep = { deltaPct: null as number | null };
 
   return (
     <div className="space-y-8">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">October 2026 · Overview</h1>
-          <p className="text-sm text-neutral-500 mt-1">
-            Acme Corp — from QuickBooks + Stripe
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-semibold">October 2026 · Overview</h1>
+        <p className="text-sm text-neutral-500 mt-1">
+          Acme Corp — from QuickBooks + Stripe
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <KpiCard
           label="Revenue"
-          value={formatCurrency(revenueNow)}
-          deltaPct={pctDelta(revenueNow, revenuePrior)}
+          value={formatCurrency(revenue)}
+          deltaPct={revStep.deltaPct}
         />
         <KpiCard
           label="EBITDA"
-          value={formatCurrency(ebitdaNow)}
-          deltaPct={pctDelta(ebitdaNow, ebitdaPrior)}
+          value={formatCurrency(ebitda)}
+          deltaPct={ebitdaStep.deltaPct}
         />
         <KpiCard
           label="MRR"
-          value={formatCurrency(mrrNow)}
-          deltaPct={pctDelta(mrrNow, mrrPrior)}
+          value={formatCurrency(mrr)}
+          deltaPct={mrrStep.deltaPct}
         />
       </div>
 
+      <VarianceTable variances={v.variances} />
+
       <div className="rounded-lg border border-neutral-200 bg-white p-5">
-        <h2 className="text-sm font-semibold mb-3">October 2026 — by account</h2>
+        <h2 className="text-sm font-semibold mb-3">EBITDA bridge</h2>
         <table className="w-full text-sm">
           <thead className="text-left text-neutral-500 border-b border-neutral-200">
             <tr>
-              <th className="py-2">Account</th>
-              <th className="py-2">Type</th>
-              <th className="py-2 text-right">Amount</th>
+              <th className="py-2 font-medium">Step</th>
+              <th className="py-2 font-medium text-right">Current</th>
+              <th className="py-2 font-medium text-right">Prior</th>
+              <th className="py-2 font-medium text-right">Δ</th>
             </tr>
           </thead>
           <tbody>
-            {c.map((e) => (
-              <tr key={e.id} className="border-b border-neutral-100 last:border-0">
-                <td className="py-2">{e.accountName}</td>
-                <td className="py-2 text-neutral-500">{e.accountType}</td>
+            {v.ebitdaBridge.steps.map((s) => (
+              <tr key={s.label} className="border-b border-neutral-100 last:border-0">
+                <td className="py-2 font-medium">{s.label}</td>
                 <td className="py-2 text-right tabular-nums">
-                  {formatCurrency(e.amount)}
+                  {formatCurrency(s.current)}
+                </td>
+                <td className="py-2 text-right tabular-nums text-neutral-500">
+                  {formatCurrency(s.prior)}
+                </td>
+                <td
+                  className={`py-2 text-right tabular-nums ${
+                    s.delta > 0
+                      ? "text-green-700"
+                      : s.delta < 0
+                      ? "text-red-700"
+                      : "text-neutral-500"
+                  }`}
+                >
+                  {s.delta >= 0 ? "+" : "−"}
+                  {formatCurrency(Math.abs(s.delta))}
                 </td>
               </tr>
             ))}
