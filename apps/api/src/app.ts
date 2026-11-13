@@ -10,6 +10,7 @@ import { connectionsRouter } from "./routes/connections";
 import { financialsRouter } from "./routes/financials";
 import { metricsRouter } from "./routes/metrics";
 import { variancesRouter } from "./routes/variances";
+import { narrativeRouter } from "./routes/narrative";
 
 export function createApp() {
   const app = express();
@@ -21,7 +22,15 @@ export function createApp() {
   app.use(healthRouter);
 
   // Authenticated + tenant-scoped routes
-  app.use(mockAuth, authRouter, connectionsRouter, financialsRouter, metricsRouter, variancesRouter);
+  app.use(
+    mockAuth, 
+    authRouter, 
+    connectionsRouter, 
+    financialsRouter, 
+    metricsRouter, 
+    variancesRouter,
+    narrativeRouter,
+  );
 
   app.use(errorHandler);
   return app;

@@ -29,7 +29,7 @@ export default function RootLayout({
                     Overview
                   </Link>
                   <span className="text-neutral-400">Connections</span>
-                  <span className="text-neutral-400">Narrative</span>
+                  <Link href="/narrative">Narrative</Link>
                   <span className="text-neutral-400">Documents</span>
                 </nav>
               </div>

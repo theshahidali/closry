@@ -25,3 +25,18 @@ export function formatUser(u: User): string {
 export function isOwner(u: User): boolean {
 	return u.role === "owner";
 }
+
+export const QUEUE_NAMES = {
+  narrative: "narrate-narrative",
+} as const;
+
+export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
+
+export type RunStatus =
+  | "queued"
+  | "ingesting"
+  | "computing"
+  | "generating"
+  | "review"
+  | "complete"
+  | "failed";
