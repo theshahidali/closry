@@ -15,6 +15,13 @@
       "when": 1794321132567,
       "tag": "0001_tranquil_omega_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794576526910,
+      "tag": "0002_fancy_violations",
+      "breakpoints": true
     }
   ]
 }
