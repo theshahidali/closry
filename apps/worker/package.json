@@ -9,6 +9,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
     "@closry/db": "workspace:*",
     "@closry/pipeline": "workspace:*",
     "@closry/shared": "workspace:*",

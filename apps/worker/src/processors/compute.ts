@@ -1,9 +1,10 @@
 import { Job } from "bullmq";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { withTenant, financialEntries, narrativeRuns, variances } from "@closry/db";
 import { computeVariances, type FinancialEntryInput } from "@closry/pipeline";
 import { pool } from "../db";
 import { publishRunEvent } from "../pubsub";
+import { attributeDriversForRun } from "./attribute";
 
 export type NarrativeJobData = {
   runId: string;
@@ -109,6 +110,49 @@ export async function processNarrativeJob(job: Job<NarrativeJobData>) {
     });
 
     await log("computing", 85, "Persisted variances");
+
+    // --- ATTRIBUTE ---
+    await withTenant(pool, tenantId, async (tx) => {
+      await tx
+        .update(narrativeRuns)
+        .set({ status: "computing", progress: 88 })
+        .where(eq(narrativeRuns.id, runId));
+    });
+    await log("attributing", 88, "Proposing drivers for each variance");
+
+    // Load the tenant name once for prompt context.
+    const [tenantRow] = await withTenant(pool, tenantId, (tx) =>
+      tx.execute(
+        sql`SELECT name FROM tenants WHERE id = current_setting('app.tenant_id', true)::uuid`,
+      ).then((r) => r.rows as Array<{ name: string }>),
+    );
+
+    const driverCount = await withTenant(pool, tenantId, async (tx) => {
+      const persisted = await tx
+        .select()
+        .from(variances)
+        .where(eq(variances.runId, runId));
+
+      return attributeDriversForRun(tx, {
+        runId,
+        tenantId,
+        tenantName: tenantRow?.name ?? "the company",
+        periodMonth,
+        variances: persisted.map((v) => ({
+          id: v.id,
+          accountCode: v.accountCode,
+          accountName: v.accountName,
+          accountType: "revenue", // not stored per-row. will widen later
+          currentValue: Number(v.currentValue),
+          priorValue: Number(v.priorValue),
+          delta: Number(v.delta),
+          deltaPct: Number(v.deltaPct),
+          materiality: v.materiality,
+        })),
+      });
+    });
+
+    await log("attributing", 95, `Proposed ${driverCount} drivers`);
 
     await withTenant(pool, tenantId, async (tx) => {
       await tx
