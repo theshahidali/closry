@@ -36,6 +36,7 @@ export type RunStatus =
   | "queued"
   | "ingesting"
   | "computing"
+  | "attributing"
   | "generating"
   | "review"
   | "complete"
