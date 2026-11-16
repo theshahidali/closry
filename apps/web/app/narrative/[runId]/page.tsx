@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
 import type { NarrativeRun, RunVariance } from "@/lib/narrative-types";
+import type { DriverProposal } from "@/lib/driver-types";
+import { DriverCard } from "@/components/driver-card";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 const DEMO_TENANT = "11111111-1111-1111-1111-111111111111";
@@ -35,6 +37,11 @@ export default function RunDetailPage() {
     queryFn: () => apiGet<RunVariance[]>(`/api/narrative/runs/${runId}/variances`),
   });
 
+  const drivers = useQuery({
+    queryKey: ["run-drivers", runId],
+    queryFn: () => apiGet<DriverProposal[]>(`/api/narrative/runs/${runId}/drivers`),
+  });
+
   // Subscribe to SSE for live progress.
   useEffect(() => {
     if (!runId) return;
@@ -62,6 +69,7 @@ export default function RunDetailPage() {
       es.close();
       run.refetch();
       variances.refetch();
+      drivers.refetch();
     });
     es.onerror = () => setSseError("SSE connection lost — refreshing");
 
@@ -88,11 +96,12 @@ export default function RunDetailPage() {
           {sseError && <span className="text-xs text-amber-600">{sseError}</span>}
         </div>
         <div className="flex gap-2 text-xs">
-          {["ingesting", "computing", "review"].map((step) => {
+          {["ingesting", "computing", "attributing", "review"].map((step) => {
             const active = progress?.step === step;
             const done =
               (step === "ingesting" && progress && ["computing", "review", "complete", "failed"].includes(progress.step)) ||
               (step === "computing" && progress && ["review", "complete", "failed"].includes(progress.step)) ||
+              (step === "attributing" && progress && ["review", "complete", "failed"].includes(progress.step)) ||
               (step === "review" && progress && ["review", "complete"].includes(progress.step));
             const color = done ? "bg-green-100 text-green-800" : active ? "bg-blue-100 text-blue-800" : "bg-neutral-100 text-neutral-500";
             return (
@@ -116,6 +125,32 @@ export default function RunDetailPage() {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">
+            Driver review ({drivers.data?.length ?? 0})
+          </h2>
+          {drivers.data && (
+            <div className="text-xs text-neutral-500">
+              {drivers.data.filter((d) => d.status !== "proposed").length} reviewed
+            </div>
+          )}
+        </div>
+        {drivers.isLoading && (
+          <div className="text-sm text-neutral-500">Loading drivers…</div>
+        )}
+        {drivers.data?.length === 0 && (
+          <div className="rounded border border-neutral-200 bg-white p-4 text-sm text-neutral-500">
+            No drivers yet. Run attribution by re-triggering the run.
+          </div>
+        )}
+        <div className="space-y-3">
+          {drivers.data?.map((d) => (
+            <DriverCard key={d.id} driver={d} runId={runId!} />
+          ))}
+        </div>
       </div>
 
       <div className="rounded-lg border border-neutral-200 bg-white overflow-hidden">

@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { z } from "zod";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import {
   narrativeRuns,
   variances as variancesTable,
+  driverAttributions,
+  companyMemory,
 } from "@closry/db";
 import { parseInput } from "../validation";
 import { tenantHandler } from "../middleware/tenant-handler";
@@ -180,4 +182,125 @@ narrativeRouter.get(
       next(err);
     }
   },
+);
+
+narrativeRouter.get(
+  "/api/narrative/runs/:id/drivers",
+  tenantHandler(async (req, tx) => {
+    const runId = req.params.id;
+    const rows = await tx
+      .select({
+        id: driverAttributions.id,
+        varianceId: driverAttributions.varianceId,
+        driverText: driverAttributions.driverText,
+        confidence: driverAttributions.confidence,
+        status: driverAttributions.status,
+        userCorrection: driverAttributions.userCorrection,
+        confirmedAt: driverAttributions.confirmedAt,
+        accountCode: variancesTable.accountCode,
+        accountName: variancesTable.accountName,
+        currentValue: variancesTable.currentValue,
+        priorValue: variancesTable.priorValue,
+        delta: variancesTable.delta,
+        deltaPct: variancesTable.deltaPct,
+        materiality: variancesTable.materiality,
+      })
+      .from(driverAttributions)
+      .innerJoin(variancesTable, eq(variancesTable.id, driverAttributions.varianceId))
+      .where(eq(driverAttributions.runId, runId))
+      .orderBy(desc(variancesTable.delta));
+    return rows.map((r) => ({
+      ...r,
+      confidence: Number(r.confidence),
+      currentValue: Number(r.currentValue),
+      priorValue: Number(r.priorValue),
+      delta: Number(r.delta),
+      deltaPct: Number(r.deltaPct),
+    }));
+  }),
+);
+
+const DriverPatchBody = z.object({
+  status: z.enum(["confirmed", "corrected", "rejected"]),
+  userCorrection: z.string().min(1).optional(),
+});
+
+narrativeRouter.patch(
+  "/api/narrative/runs/:id/drivers/:driverId",
+  tenantHandler(async (req, tx) => {
+    const { id: runId, driverId } = req.params;
+    const body = parseInput(DriverPatchBody, req.body);
+
+    if (body.status === "corrected" && !body.userCorrection) {
+      throw Object.assign(
+        new Error("userCorrection required when status = corrected"),
+        { status: 400 },
+      );
+    }
+
+    // Load the driver + join variance to know accountCode for memory write.
+    const [driver] = await tx
+      .select({
+        id: driverAttributions.id,
+        varianceId: driverAttributions.varianceId,
+        runId: driverAttributions.runId,
+        accountCode: variancesTable.accountCode,
+      })
+      .from(driverAttributions)
+      .innerJoin(variancesTable, eq(variancesTable.id, driverAttributions.varianceId))
+      .where(
+        and(
+          eq(driverAttributions.id, driverId),
+          eq(driverAttributions.runId, runId),
+        ),
+      )
+      .limit(1);
+
+    if (!driver) {
+      throw Object.assign(new Error("driver not found"), { status: 404 });
+    }
+
+    const now = new Date();
+    const [updated] = await tx
+      .update(driverAttributions)
+      .set({
+        status: body.status,
+        userCorrection: body.userCorrection ?? null,
+        confirmedBy: req.userId,
+        confirmedAt: now,
+      })
+      .where(eq(driverAttributions.id, driverId))
+      .returning();
+
+    // Upsert into company_memory on confirm OR correct.
+    if (body.status === "confirmed" || body.status === "corrected") {
+      const pattern =
+        body.status === "corrected"
+          ? body.userCorrection!
+          : updated.driverText;
+      await tx
+        .insert(companyMemory)
+        .values({
+          tenantId: req.tenantId!,
+          accountCode: driver.accountCode,
+          driverPattern: pattern,
+        })
+        .onConflictDoUpdate({
+          target: [
+            companyMemory.tenantId,
+            companyMemory.accountCode,
+            companyMemory.driverPattern,
+          ],
+          set: {
+            evidenceCount: sql`${companyMemory.evidenceCount} + 1`,
+            lastConfirmedAt: now,
+          },
+        });
+    }
+
+    return {
+      ...updated,
+      confidence: Number(updated.confidence),
+    };
+  }),
 );

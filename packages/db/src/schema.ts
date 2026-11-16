@@ -283,3 +283,38 @@ export const driverAttributions = pgTable(
     runIdx: index("idx_driver_attributions_tenant_run").on(t.tenantId, t.runId),
   }),
 ).enableRLS();
+
+// --- company_memory ---
+export const companyMemory = pgTable(
+  "company_memory",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    accountCode: text("account_code").notNull(),
+    driverPattern: text("driver_pattern").notNull(),
+    evidenceCount: integer("evidence_count").notNull().default(1),
+    lastConfirmedAt: timestamp("last_confirmed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    tenantIsolation: pgPolicy("tenant_isolation", {
+      as: "permissive",
+      to: appUser,
+      using: sql`tenant_id = current_setting('app.tenant_id', true)::uuid`,
+      withCheck: sql`tenant_id = current_setting('app.tenant_id', true)::uuid`,
+    }),
+    tenantAccountIdx: index("idx_company_memory_tenant_account").on(
+      t.tenantId,
+      t.accountCode,
+    ),
+    tenantAccountPatternUniq: uniqueIndex(
+      "uniq_company_memory_tenant_account_pattern",
+    ).on(t.tenantId, t.accountCode, t.driverPattern),
+  }),
+).enableRLS();
